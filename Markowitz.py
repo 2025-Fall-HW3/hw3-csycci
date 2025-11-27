@@ -63,6 +63,20 @@ class EqualWeightPortfolio:
         TODO: Complete Task 1 Below
         """
 
+        # 1. 計算資產數量 (m)
+        # assets 變數已經在上面定義為排除 SPY 後的資產列表
+        m = len(assets)
+        
+        # 2. 設定權重
+        # 如果有資產，則每個資產權重為 1/m，否則為 0
+        weight = 1.0 / m if m > 0 else 0.0
+        
+        # 3. 將權重填入 DataFrame
+        # 直接對選定的 assets 欄位賦值，Pandas 會自動廣播到所有日期 (index)
+        self.portfolio_weights[assets] = weight
+        
+        # (註：未被選到的 SPY 欄位目前是 NaN，稍後的 fillna(0) 會將其補為 0)
+
         """
         TODO: Complete Task 1 Above
         """
@@ -113,8 +127,32 @@ class RiskParityPortfolio:
         """
         TODO: Complete Task 2 Below
         """
+        # 依照 MeanVariance 的邏輯，從 lookback + 1 開始
+        # 這是為了避開 index 0 (因為 pct_change 產生的 0 會導致波動率計算失真)
+        for i in range(self.lookback + 1, len(df)):
+            
+            # 1. 取得計算區間 (與 MeanVariance 完全一致)
+            # 使用過去 lookback 天的資料，不包含當天 i
+            window_returns = df_returns[assets].iloc[i - self.lookback : i]
 
+            # 2. 計算波動率 (Standard Deviation)
+            sigma = window_returns.std()
 
+            # 3. 計算波動率倒數 (Inverse Volatility)
+            # 加上極小值 1e-8 防止除以 0
+            inv_sigma = 1.0 / (sigma + 1e-8)
+
+            # 4. 權重歸一化 (Normalize)
+            # 公式: w_i = (1/sigma_i) / sum(1/sigma_j)
+            sum_inv_sigma = inv_sigma.sum()
+            
+            if sum_inv_sigma > 0:
+                weights = inv_sigma / sum_inv_sigma
+            else:
+                weights = 0.0
+
+            # 5. 填入權重
+            self.portfolio_weights.loc[df.index[i], assets] = weights
 
         """
         TODO: Complete Task 2 Above
@@ -190,8 +228,23 @@ class MeanVariancePortfolio:
 
                 # Sample Code: Initialize Decision w and the Objective
                 # NOTE: You can modify the following code
+                # 1. 宣告變數
+                # ub=1 代表權重上限為 1 (不能超過 100%)
+                # 預設 lb=0 代表權重下限為 0 (Long-only constraint)
                 w = model.addMVar(n, name="w", ub=1)
-                model.setObjective(w.sum(), gp.GRB.MAXIMIZE)
+
+                # 2. 設定目標函數 (Objective Function)
+                # Maximize: w^T * mu - (gamma / 2) * w^T * Sigma * w
+                # 使用 @ 符號進行矩陣乘法
+                # mu @ w 代表預期報酬 (Return Term)
+                # w @ Sigma @ w 代表組合變異數 (Risk Term)
+                objective = mu @ w - 0.5 * gamma * (w @ Sigma @ w)
+                
+                model.setObjective(objective, gp.GRB.MAXIMIZE)
+
+                # 3. 加入限制條件 (Constraints)
+                # 權重總和必須為 1 (Budget Constraint)
+                model.addConstr(w.sum() == 1, name="budget")
 
                 """
                 TODO: Complete Task 3 Above

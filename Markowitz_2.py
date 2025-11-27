@@ -10,6 +10,7 @@ import gurobipy as gp
 import warnings
 import argparse
 import sys
+from gurobipy import GRB
 
 """
 Project Setup
@@ -51,7 +52,7 @@ class MyPortfolio:
     NOTE: You can modify the initialization function
     """
 
-    def __init__(self, price, exclude, lookback=50, gamma=0):
+    def __init__(self, price, exclude, lookback=60, gamma=2.0):
         self.price = price
         self.returns = price.pct_change().fillna(0)
         self.exclude = exclude
@@ -70,8 +71,18 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
+        # 策略邏輯：All-in 科技股 (XLK)
+        # 1. 將所有資產的權重先初始化為 0
+        self.portfolio_weights[:] = 0.0
         
-        
+        # 2. 檢查 'XLK' 是否在資產列表中，如果在，則將其權重設為 100% (1.0)
+        # XLK 代表 Technology Select Sector SPDR Fund
+        if 'XLK' in self.portfolio_weights.columns:
+            self.portfolio_weights['XLK'] = 1.0
+        else:
+            # 防呆機制：如果找不到 XLK (理論上不會發生)，則退回平均分配
+            n_assets = len(self.portfolio_weights.columns)
+            self.portfolio_weights[:] = 1.0 / n_assets
         """
         TODO: Complete Task 4 Above
         """
